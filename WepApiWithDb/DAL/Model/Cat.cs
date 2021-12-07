@@ -16,6 +16,7 @@ namespace CatsWepApiWithDb.DAL
         public decimal? OldPrice { get; set; }
         public string Description { get; set; }
 
+        public int OwnerId { get; set; }
         public Owner Owner { get; set; }
 
         public ICollection<CatCategory> Categories { get; set; }
