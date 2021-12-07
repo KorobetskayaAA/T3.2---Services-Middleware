@@ -20,40 +20,66 @@ namespace CatsWepApiWithDb.Controllers
             _context = context;
         }
 
-        // GET: api/Cats
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<Cat>>> GetCats()
+        [HttpGet("{ownerId}")]
+        public async Task<ActionResult<IEnumerable<Model.ViewCat>>> GetCats(int ownerId)
         {
-            return await _context.Cats.ToListAsync();
+            if (!OwnerExists(ownerId))
+            {
+                return NotFound();
+            }
+            var cats = await _context.Cats
+                .Where(cat => cat.OwnerId == ownerId)
+                .Include(cat => cat.Owner)
+                .Include(cat => cat.Categories)
+                .ThenInclude(cc => cc.Category)
+                .ToListAsync();
+            return Ok(cats.Select(cat => new Model.ViewCat(cat)));
         }
 
-        // GET: api/Cats/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Cat>> GetCat(string id)
+        [HttpGet("{ownerId}/{id}")]
+        public async Task<ActionResult<Model.ViewCat>> GetCat(int ownerId, string id)
         {
-            var cat = await _context.Cats.FindAsync(id);
+            if (!OwnerExists(ownerId))
+            {
+                return NotFound();
+            }
+
+            var cat = await _context.Cats
+                .Include(cat => cat.Owner)
+                .Include(cat => cat.Categories)
+                .ThenInclude(cc => cc.Category)
+                .FirstOrDefaultAsync(cat => cat.Id == id);
 
             if (cat == null)
             {
                 return NotFound();
             }
 
-            return cat;
-        }
-
-        // PUT: api/Cats/5
-        // To protect from overposting attacks, enable the specific properties you want to bind to, for
-        // more details, see https://go.microsoft.com/fwlink/?linkid=2123754.
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutCat(string id, Cat cat)
-        {
-            if (id != cat.Id)
+            if (cat.OwnerId != ownerId)
             {
                 return BadRequest();
             }
 
-            _context.Entry(cat).State = EntityState.Modified;
+            return new Model.ViewCat(cat);
+        }
 
+        [HttpPut("{ownerId}/{id}")]
+        public async Task<IActionResult> PutCat(int ownerId, string id, Model.PostedCat cat)
+        {
+            if (!OwnerExists(ownerId))
+            {
+                return NotFound();
+            }
+
+            if (id != cat.Id || cat.OwnerId != ownerId)
+            {
+                return BadRequest();
+            }
+
+            var catToUpdate = _context.Cats.Find(cat.Id);
+            _context.UpdateRange(_context.CatCategory
+                .Where(cc => cc.CatId == cat.Id));
+            cat.Update(catToUpdate);
             try
             {
                 await _context.SaveChangesAsync();
@@ -70,16 +96,17 @@ namespace CatsWepApiWithDb.Controllers
                 }
             }
 
-            return NoContent();
+            return Ok();
         }
 
-        // POST: api/Cats
-        // To protect from overposting attacks, enable the specific properties you want to bind to, for
-        // more details, see https://go.microsoft.com/fwlink/?linkid=2123754.
-        [HttpPost]
-        public async Task<ActionResult<Cat>> PostCat(Cat cat)
+        [HttpPost("{ownerId}")]
+        public async Task<ActionResult<Model.ViewCat>> PostCat(int ownerId, Model.PostedCat cat)
         {
-            _context.Cats.Add(cat);
+            cat.OwnerId = ownerId;
+            var createdCat = cat.Create();
+
+            _context.Cats.Add(createdCat);
+
             try
             {
                 await _context.SaveChangesAsync();
@@ -96,12 +123,18 @@ namespace CatsWepApiWithDb.Controllers
                 }
             }
 
-            return CreatedAtAction("GetCat", new { id = cat.Id }, cat);
+            foreach (var catCategory in createdCat.Categories)
+            {
+                await _context.Entry(catCategory).Reference(cc => cc.Category).LoadAsync();
+            }
+
+            return CreatedAtAction("GetCat", 
+                new { ownerId = cat.OwnerId, id = cat.Id },
+                new Model.ViewCat(createdCat));
         }
 
-        // DELETE: api/Cats/5
-        [HttpDelete("{id}")]
-        public async Task<ActionResult<Cat>> DeleteCat(string id)
+        [HttpDelete("{ownerId}/{id}")]
+        public async Task<ActionResult<Cat>> DeleteCat(int ownerId, string id)
         {
             var cat = await _context.Cats.FindAsync(id);
             if (cat == null)
@@ -109,10 +142,20 @@ namespace CatsWepApiWithDb.Controllers
                 return NotFound();
             }
 
+            if (cat.OwnerId != ownerId)
+            {
+                return BadRequest();
+            }
+
             _context.Cats.Remove(cat);
             await _context.SaveChangesAsync();
 
             return cat;
+        }
+
+        private bool OwnerExists(int id)
+        {
+            return _context.Owners.Any(e => e.Id == id);
         }
 
         private bool CatExists(string id)
