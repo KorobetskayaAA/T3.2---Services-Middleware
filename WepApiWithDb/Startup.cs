@@ -1,3 +1,4 @@
+using CatsWepApiWithDb.BL;
 using CatsWepApiWithDb.DAL;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -32,6 +33,10 @@ namespace WepApiWithDb
                     Configuration.GetConnectionString("DefaultConnection")
                 )
             );
+
+            services.AddTransient<OwnersService>();
+            services.AddTransient<CatalogService>();
+            services.AddTransient<CatsService>();
 
             services.AddControllers();
         }

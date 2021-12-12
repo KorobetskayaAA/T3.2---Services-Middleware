@@ -2,10 +2,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using CatsWepApiWithDb.DAL;
+using CatsWepApiWithDb.BL;
+using CatsWepApiWithDb.BL.Model;
 
 namespace CatsWepApiWithDb.Controllers
 {
@@ -13,55 +13,39 @@ namespace CatsWepApiWithDb.Controllers
     [ApiController]
     public class CatalogController : ControllerBase
     {
-        private readonly MurcatContext _context;
+        private readonly CatalogService _catalogService;
 
-        public CatalogController(MurcatContext context)
+        public CatalogController(CatalogService catalogService)
         {
-            _context = context;
+            _catalogService = catalogService;
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Cat>>> GetCats()
+        public async Task<ActionResult<IEnumerable<ViewCat>>> GetCats()
         {
-            return await _context.Cats.ToListAsync();
+            return Ok(await _catalogService.GetCats());
         }
 
         [HttpGet("{id}")]
-        public async Task<ActionResult<Model.ViewCat>> GetCat(string id)
+        public async Task<ActionResult<ViewCat>> GetCat(string id)
         {
-            var cat = await _context.Cats.FindAsync(id);
-
+            var cat = await _catalogService.GetCat(id);
             if (cat == null)
             {
                 return NotFound();
             }
-
-            await _context.Entry(cat).Reference(p => p.Owner).LoadAsync();
-            await _context.Entry(cat).Collection(p => p.Categories).LoadAsync();
-            foreach (var catCategory in cat.Categories)
-            {
-                await _context.Entry(catCategory).Reference(cc => cc.Category).LoadAsync();
-            }
-
-            return new Model.ViewCat(cat);
+            return Ok(cat);
         }
 
         [HttpPost("{id}/vote/{cuteness}")]
         public async Task<ActionResult<float>> PostVote(string id, float cuteness)
         {
-            var cat = await _context.Cats.FindAsync(id);
-
+            var cat = await _catalogService.Vote(id, cuteness);
             if (cat == null)
             {
                 return NotFound();
             }
-
-            cat.CutenessSum += cuteness;
-            cat.VotesCount++;
-
-            await _context.SaveChangesAsync();
-
-            return Ok(cat.CutenessSum / cat.VotesCount);
+            return Ok(cat.Cuteness);
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿namespace CatsWepApiWithDb.Controllers.Model
+﻿namespace CatsWepApiWithDb.BL.Model
 {
     public class Owner
     {

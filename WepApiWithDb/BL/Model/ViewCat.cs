@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 
-namespace CatsWepApiWithDb.Controllers.Model
+namespace CatsWepApiWithDb.BL.Model
 {
     public class ViewCat
     {
