@@ -34,6 +34,10 @@ namespace CatsWepApiWithDb.BL.Model
 
         public void Update(DAL.Cat catToUpdate)
         {
+            if (catToUpdate == null)
+            {
+                return;
+            }
             catToUpdate.Name = Name;
             catToUpdate.Description = Description;
             if (Price != catToUpdate.Price)

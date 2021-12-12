@@ -1,4 +1,4 @@
-﻿using CatsWepApiWithDb.DAL;
+﻿using CatsWepApiWithDb.DAL.Repositories;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -9,25 +9,22 @@ namespace CatsWepApiWithDb.BL
 {
     public class CatsService
     {
-        private readonly MurcatContext _context;
+        private readonly CatRepository _catRepository;
+        private readonly OwnerRepository _ownerRepository;
 
-        public CatsService(MurcatContext context)
+        public CatsService(CatRepository catRepository, OwnerRepository ownerRepository)
         {
-            _context = context;
+            _catRepository = catRepository;
+            _ownerRepository = ownerRepository;
         }
 
         public async Task<MurcatResult<IEnumerable<Model.ViewCat>>> GetCats(int ownerId)
         {
-            if (!OwnerExists(ownerId))
+            if (!_ownerRepository.Exists(ownerId))
             {
                 return new MurcatResult<IEnumerable<Model.ViewCat>>(MurcatResultStatus.NotFound);
             }
-            var cats = await _context.Cats
-                .Where(cat => cat.OwnerId == ownerId)
-                .Include(cat => cat.Owner)
-                .Include(cat => cat.Categories)
-                .ThenInclude(cc => cc.Category)
-                .ToListAsync();
+            var cats = await _catRepository.GetAsync();
 
             var catViews = cats.Select(cat => new Model.ViewCat(cat));
 
@@ -36,16 +33,12 @@ namespace CatsWepApiWithDb.BL
 
         public async Task<MurcatResult<Model.ViewCat>> GetCat(int ownerId, string id)
         {
-            if (!OwnerExists(ownerId))
+            if (!_ownerRepository.Exists(ownerId))
             {
                 return new MurcatResult<Model.ViewCat>(MurcatResultStatus.NotFound);
             }
 
-            var cat = await _context.Cats
-                .Include(cat => cat.Owner)
-                .Include(cat => cat.Categories)
-                .ThenInclude(cc => cc.Category)
-                .FirstOrDefaultAsync(cat => cat.Id == id);
+            var cat = await _catRepository.GetWithOwnerCategoresAsync(id);
 
             if (cat == null)
             {
@@ -62,7 +55,7 @@ namespace CatsWepApiWithDb.BL
 
         public async Task<MurcatResult> UpdateCat(int ownerId, string id, Model.PostedCat cat)
         {
-            if (!OwnerExists(ownerId))
+            if (!_ownerRepository.Exists(ownerId))
             {
                 return new MurcatResult(MurcatResultStatus.NotFound);
             }
@@ -72,20 +65,21 @@ namespace CatsWepApiWithDb.BL
                 return new MurcatResult(MurcatResultStatus.WrongInput);
             }
 
-            var catToUpdate = _context.Cats.Find(cat.Id);
-            _context.UpdateRange(_context.CatCategory
-                .Where(cc => cc.CatId == cat.Id));
+            if (!_catRepository.Exists(id))
+            {
+                return new MurcatResult(MurcatResultStatus.NotFound);
+            }
+
+            var catToUpdate = await _catRepository.GetAsync(cat.Id);
+            await _catRepository.LoadCategoriesAsync(catToUpdate);
             cat.Update(catToUpdate);
+
             try
             {
-                await _context.SaveChangesAsync();
+                 await _catRepository.SaveAsync();
             }
             catch (DbUpdateConcurrencyException)
             {
-                if (!CatExists(id))
-                {
-                    new MurcatResult(MurcatResultStatus.NotFound);
-                }
                 return new MurcatResult(MurcatResultStatus.DataSaveFailed);
             }
 
@@ -97,32 +91,29 @@ namespace CatsWepApiWithDb.BL
             cat.OwnerId = ownerId;
             var createdCat = cat.Create();
 
-            _context.Cats.Add(createdCat);
+            _catRepository.Create(createdCat);
 
             try
             {
-                await _context.SaveChangesAsync();
+                await _catRepository.SaveAsync();
             }
             catch (DbUpdateException)
             {
-                if (CatExists(cat.Id))
+                if (_catRepository.Exists(cat.Id))
                 {
                     new MurcatResult<Model.ViewCat>(MurcatResultStatus.AlreadyExists);
                 }
                 return new MurcatResult<Model.ViewCat>(MurcatResultStatus.DataSaveFailed);
             }
 
-            foreach (var catCategory in createdCat.Categories)
-            {
-                await _context.Entry(catCategory).Reference(cc => cc.Category).LoadAsync();
-            }
+            await _catRepository.LoadCategoriesAsync(createdCat);
 
             return new MurcatResult<Model.ViewCat>(new Model.ViewCat(createdCat));
         }
 
         public async Task<MurcatResult<Model.ViewCat>> DeleteCat(int ownerId, string id)
         {
-            var cat = await _context.Cats.FindAsync(id);
+            var cat = await _catRepository.GetAsync(id);
             if (cat == null)
             {
                 return new MurcatResult<Model.ViewCat>(MurcatResultStatus.NotFound);
@@ -133,10 +124,10 @@ namespace CatsWepApiWithDb.BL
                 return new MurcatResult<Model.ViewCat>(MurcatResultStatus.WrongInput);
             }
 
-            _context.Cats.Remove(cat);
+            _catRepository.Delete(cat);
             try
             {
-                await _context.SaveChangesAsync();
+                await _catRepository.SaveAsync();
             }
             catch (DbUpdateException)
             {
@@ -144,16 +135,6 @@ namespace CatsWepApiWithDb.BL
             }
 
             return new MurcatResult<Model.ViewCat>(new Model.ViewCat(cat));
-        }
-
-        private bool OwnerExists(int id)
-        {
-            return _context.Owners.Any(e => e.Id == id);
-        }
-
-        private bool CatExists(string id)
-        {
-            return _context.Cats.Any(e => e.Id == id);
         }
     }
 }

@@ -2,54 +2,46 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using CatsWepApiWithDb.DAL;
+using CatsWepApiWithDb.DAL.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace CatsWepApiWithDb.BL
 {
     public class CatalogService
     {
-        private readonly MurcatContext _context;
+        private readonly CatRepository _repository;
 
-        public CatalogService(MurcatContext context)
+        public CatalogService(CatRepository repository)
         {
-            _context = context;
+            _repository = repository;
         }
 
         // Для демонстрационных целей данный сервис не использует MurcatResult
         // В реальном проекте сервисы должны быть единообразными!
         public async Task<IEnumerable<Model.ViewCat>> GetCats()
         {
-            var cats = await _context.Cats
-                .Include(cat => cat.Owner)
-                .Include(cat => cat.Categories)
-                .ThenInclude(cc => cc.Category)
-                .ToListAsync();
+            var cats = await _repository.GetAsync();
             return cats.Select(cat => new Model.ViewCat(cat));
         }
 
         public async Task<Model.ViewCat> GetCat(string id)
         {
-            var cat = await _context.Cats.FindAsync(id);
+            var cat = await _repository.GetAsync(id);
 
             if (cat == null)
             {
                 return null;
             }
 
-            await _context.Entry(cat).Reference(p => p.Owner).LoadAsync();
-            await _context.Entry(cat).Collection(p => p.Categories).LoadAsync();
-            foreach (var catCategory in cat.Categories)
-            {
-                await _context.Entry(catCategory).Reference(cc => cc.Category).LoadAsync();
-            }
+            await _repository.LoadOwnerAsync(cat);
+            await _repository.LoadCategoriesAsync(cat);
 
             return new Model.ViewCat(cat);
         }
 
         public async Task<Model.ViewCat> Vote(string id, float cuteness)
         {
-            var cat = await _context.Cats.FindAsync(id);
+            var cat = await _repository.GetAsync(id);
 
             if (cat == null)
             {
@@ -59,7 +51,7 @@ namespace CatsWepApiWithDb.BL
             cat.CutenessSum += cuteness;
             cat.VotesCount++;
 
-            await _context.SaveChangesAsync();
+            await _repository.SaveAsync();
 
             return new Model.ViewCat(cat);
         }

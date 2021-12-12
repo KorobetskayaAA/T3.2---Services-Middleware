@@ -1,4 +1,4 @@
-﻿using CatsWepApiWithDb.DAL;
+﻿using CatsWepApiWithDb.DAL.Repositories;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using System.Threading.Tasks;
@@ -7,16 +7,16 @@ namespace CatsWepApiWithDb.BL
 {
     public class OwnersService
     {
-        private readonly MurcatContext _context;
+        private readonly OwnerRepository _repository;
 
-        public OwnersService(MurcatContext context)
+        public OwnersService(OwnerRepository repository)
         {
-            _context = context;
+            _repository = repository;
         }
 
         public async Task<MurcatResult<Model.Owner>> GetOwner(int id)
         {
-            var owner = await _context.Owners.FindAsync(id);
+            var owner = await _repository.GetAsync(id);
 
             if (owner == null)
             {
@@ -33,15 +33,15 @@ namespace CatsWepApiWithDb.BL
                 return new MurcatResult<Model.Owner>(MurcatResultStatus.WrongInput);
             }
 
-            _context.Update(Model.Owner.Map(owner));
+            _repository.Update(Model.Owner.Map(owner));
 
             try
             {
-                await _context.SaveChangesAsync();
+                await _repository.SaveAsync();
             }
             catch (DbUpdateConcurrencyException)
             {
-                if (!OwnerExists(id))
+                if (!_repository.Exists(id))
                 {
                     return new MurcatResult<Model.Owner>(MurcatResultStatus.NotFound);
                 }
@@ -49,11 +49,6 @@ namespace CatsWepApiWithDb.BL
             }
 
             return new MurcatResult<Model.Owner>(MurcatResultStatus.Ok);
-        }
-
-        private bool OwnerExists(int id)
-        {
-            return _context.Owners.Any(e => e.Id == id);
         }
     }
 }
